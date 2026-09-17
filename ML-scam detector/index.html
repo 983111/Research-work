@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScamShield — Interpretable Multi-Signal Scam Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ============ TOKENS ============ */
+  :root{
+    --bg:#ffffff;
+    --bg-alt:#f5f6f8;
+    --ink:#14171f;
+    --ink-soft:#55606e;
+    --ink-faint:#8991a0;
+    --line:#e3e6ec;
+    --line-strong:#c9ced9;
+    --navy:#1c2d4a;
+    --navy-soft:#2f4571;
+    --navy-wash:#eef1f6;
+    --teal:#0e7490;
+    --teal-wash:#e7f2f4;
+    --danger:#b3392c;
+    --danger-wash:#f8ece9;
+    --safe:#1f7a4d;
+    --safe-wash:#e9f4ee;
+    --amber:#a8721f;
+    --amber-wash:#f7f0e3;
+    --serif:'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --mono:'IBM Plex Mono','SFMono-Regular',Consolas,'Liberation Mono',monospace;
+    --maxw-text:680px;
+    --maxw-wide:960px;
+    --sidebar-w:264px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#12141a; --bg-alt:#181b23; --ink:#e7e9ef; --ink-soft:#a8afbc;
+      --ink-faint:#767e8c; --line:#2a2f3a; --line-strong:#3a4150;
+      --navy:#8ea2cf; --navy-soft:#a9bade; --navy-wash:#1b2436;
+      --teal:#5cbdd2; --teal-wash:#12262a;
+      --danger:#e0897c; --danger-wash:#2e1c1a;
+      --safe:#7fd0a3; --safe-wash:#152a20;
+      --amber:#d7aa66; --amber-wash:#2a2013;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#12141a; --bg-alt:#181b23; --ink:#e7e9ef; --ink-soft:#a8afbc;
+    --ink-faint:#767e8c; --line:#2a2f3a; --line-strong:#3a4150;
+    --navy:#8ea2cf; --navy-soft:#a9bade; --navy-wash:#1b2436;
+    --teal:#5cbdd2; --teal-wash:#12262a;
+    --danger:#e0897c; --danger-wash:#2e1c1a;
+    --safe:#7fd0a3; --safe-wash:#152a20;
+    --amber:#d7aa66; --amber-wash:#2a2013;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
+
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--serif); font-size:17px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--navy);}
+  a:focus-visible, button:focus-visible, summary:focus-visible{outline:2px solid var(--teal); outline-offset:3px;}
+
+  img,svg{max-width:100%;}
+
+  /* ============ PROGRESS BAR ============ */
+  #progress{position:fixed; top:0; left:0; height:3px; background:var(--navy); width:0%; z-index:200; transition:width .08s linear;}
+
+  /* ============ LAYOUT ============ */
+  .layout{display:flex; max-width:1320px; margin:0 auto; align-items:flex-start;}
+  .sidebar{
+    width:var(--sidebar-w); flex-shrink:0; position:sticky; top:0;
+    height:100vh; overflow-y:auto; padding:36px 26px 40px;
+    border-right:1px solid var(--line);
+  }
+  .brand{display:flex; align-items:center; gap:10px; margin-bottom:28px;}
+  .brand-mark{width:30px; height:30px; flex-shrink:0;}
+  .brand-text{font-family:var(--mono); font-weight:600; font-size:14.5px; letter-spacing:0.01em;}
+  .brand-sub{font-family:var(--mono); font-size:11px; color:var(--ink-faint); margin-top:2px;}
+
+  nav.toc{margin-top:8px;}
+  nav.toc ol{list-style:none; margin:0; padding:0; border-left:1px solid var(--line);}
+  nav.toc li{margin:0;}
+  nav.toc a{
+    display:block; padding:7px 0 7px 16px; margin-left:-1px; border-left:1px solid transparent;
+    font-family:var(--mono); font-size:12.5px; color:var(--ink-soft); text-decoration:none;
+    line-height:1.35;
+  }
+  nav.toc a:hover{color:var(--ink);}
+  nav.toc a.active{color:var(--navy); border-left:1px solid var(--navy); font-weight:600;}
+
+  .sidebar-meta{margin-top:32px; padding-top:20px; border-top:1px solid var(--line); font-family:var(--mono); font-size:11.5px; color:var(--ink-faint); line-height:1.7;}
+  .sidebar-meta strong{display:block; color:var(--ink-soft); font-weight:600;}
+
+  .mobile-bar{display:none;}
+
+  .main{flex:1; min-width:0;}
+
+  .wrap{max-width:var(--maxw-text); margin:0 auto; padding:0 28px;}
+  .wrap-wide{max-width:var(--maxw-wide); margin:0 auto; padding:0 28px;}
+
+  section{padding:64px 0;}
+  section + section{border-top:1px solid var(--line);}
+  .alt{background:var(--bg-alt);}
+
+  h1,h2,h3,h4{font-family:var(--serif); color:var(--ink); font-weight:600; letter-spacing:-0.01em;}
+  h1{font-size:44px; line-height:1.08; font-weight:700; margin:0 0 18px;}
+  h2{font-size:28px; margin:0 0 22px; line-height:1.2;}
+  h3{font-size:19px; margin:34px 0 12px; line-height:1.3;}
+  h4{font-size:15.5px; margin:22px 0 8px; font-family:var(--mono); text-transform:none; color:var(--navy);}
+  p{margin:0 0 16px; color:var(--ink);}
+  .lede{font-size:19px; color:var(--ink-soft); line-height:1.55;}
+  .soft{color:var(--ink-soft);}
+  .small{font-size:14px;}
+  .mono{font-family:var(--mono);}
+
+  ul.plain, ol.plain{margin:0 0 16px; padding-left:22px;}
+  ul.plain li, ol.plain li{margin-bottom:9px;}
+
+  sup.refnum a{font-family:var(--mono); font-size:11px; text-decoration:none; color:var(--teal); padding:0 1px;}
+
+  /* ============ HERO ============ */
+  .hero{padding:76px 0 0;}
+  .hero-kicker{font-family:var(--mono); font-size:12.5px; color:var(--ink-faint); margin-bottom:16px;}
+  .hero-authors{font-family:var(--mono); font-size:13.5px; color:var(--ink-soft); margin-bottom:34px;}
+  .hero-authors a{color:var(--ink-soft); text-decoration:underline; text-decoration-color:var(--line-strong);}
+  .abstract-block{
+    border-left:3px solid var(--navy); padding:4px 0 4px 22px; margin:30px 0 40px;
+  }
+  .abstract-block h4{margin-top:0;}
+
+  .stat-row{display:flex; flex-wrap:wrap; gap:0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin:8px 0 0;}
+  .stat{flex:1 1 150px; padding:22px 20px 22px 0; border-right:1px solid var(--line);}
+  .stat:last-child{border-right:none;}
+  .stat-num{font-family:var(--serif); font-weight:700; font-size:27px; color:var(--navy); line-height:1.15;}
+  .stat-label{font-family:var(--mono); font-size:11.5px; color:var(--ink-faint); margin-top:6px; line-height:1.4;}
+
+  /* ============ PIPELINE / FLOW DIAGRAM ============ */
+  .flow{display:flex; flex-wrap:wrap; align-items:stretch; gap:0; margin:8px 0 4px; border:1px solid var(--line);}
+  .flow-step{flex:1 1 140px; padding:16px 14px; background:var(--bg); position:relative;}
+  .flow-step + .flow-step{border-left:1px solid var(--line);}
+  .flow-step .ft{font-family:var(--mono); font-size:11px; color:var(--ink-faint); margin-bottom:6px;}
+  .flow-step .fv{font-size:14.5px; line-height:1.35; font-family:var(--serif); font-weight:600;}
+  .flow-step .fd{font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin-top:6px; line-height:1.4;}
+  .flow-arrow{display:flex; align-items:center; justify-content:center; width:0; color:var(--ink-faint);}
+  .flow-note{font-family:var(--mono); font-size:12px; color:var(--ink-faint); margin-top:10px;}
+
+  @media (max-width:720px){
+    .flow{flex-direction:column;}
+    .flow-step + .flow-step{border-left:none; border-top:1px solid var(--line);}
+  }
+
+  /* ============ CONTRIBUTIONS LIST ============ */
+  .contrib-list{list-style:none; margin:0; padding:0; border-top:1px solid var(--line);}
+  .contrib-list li{display:flex; gap:16px; padding:14px 0; border-bottom:1px solid var(--line);}
+  .contrib-list .cnum{font-family:var(--mono); font-size:12px; color:var(--ink-faint); padding-top:2px; width:20px; flex-shrink:0;}
+
+  /* ============ RQ LIST ============ */
+  .rq-list{list-style:none; margin:24px 0; padding:0; display:grid; gap:1px; background:var(--line); border:1px solid var(--line);}
+  .rq-item{background:var(--bg); padding:18px 20px; display:flex; gap:16px; align-items:baseline;}
+  .rq-item .rn{font-family:var(--serif); font-weight:700; font-size:22px; color:var(--navy-wash); -webkit-text-stroke:1px var(--navy); color:transparent; flex-shrink:0; width:28px;}
+  .rq-item .rt{font-size:16px;}
+
+  /* ============ RELATED WORK ============ */
+  .cite-list{list-style:none; margin:0; padding:0;}
+  .cite-list li{padding:14px 0 14px 18px; border-left:2px solid var(--line); margin-bottom:2px;}
+  .cite-list .who{font-family:var(--mono); font-size:12.5px; color:var(--navy); margin-bottom:4px;}
+
+  /* ============ TABLES ============ */
+  .tbl-wrap{overflow-x:auto; margin:18px 0 8px; border:1px solid var(--line);}
+  table{border-collapse:collapse; width:100%; font-size:14.5px; min-width:420px;}
+  caption{caption-side:top; text-align:left; font-family:var(--mono); font-size:12px; color:var(--ink-faint); padding:10px 14px; border-bottom:1px solid var(--line); background:var(--bg-alt);}
+  th,td{padding:10px 14px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap;}
+  thead th{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); font-weight:600; background:var(--bg-alt); border-bottom:1px solid var(--line-strong);}
+  tbody tr:last-child td{border-bottom:none;}
+  td.num, th.num{font-family:var(--mono); text-align:right;}
+  tr.hl td{background:var(--navy-wash); font-weight:600;}
+  .tbl-note{font-size:13px; color:var(--ink-faint); margin:8px 0 24px;}
+
+  /* ============ CALLOUT ============ */
+  .callout{border:1px solid var(--line); border-left:3px solid var(--ink); padding:16px 20px; margin:22px 0; background:var(--bg-alt); font-size:15px;}
+  .callout.honest{border-left-color:var(--teal);}
+  .callout.warn{border-left-color:var(--danger); background:var(--danger-wash);}
+  .callout h4{margin-top:0; color:var(--ink);}
+
+  /* ============ FIGURE WRAPPER ============ */
+  figure{margin:28px 0 30px;}
+  figcaption{font-family:var(--mono); font-size:12px; color:var(--ink-faint); margin-top:12px; line-height:1.5;}
+  figcaption b{color:var(--ink-soft); font-weight:600;}
+
+  /* ============ HORIZONTAL BAR CHART ============ */
+  .hbar-chart{display:flex; flex-direction:column; gap:10px;}
+  .hbar-row{display:grid; grid-template-columns:150px 1fr 64px; align-items:center; gap:12px;}
+  .hbar-label{font-family:var(--mono); font-size:12.5px; color:var(--ink-soft); text-align:right; line-height:1.3;}
+  .hbar-track{background:var(--bg-alt); border:1px solid var(--line); height:20px; position:relative;}
+  .hbar-fill{height:100%; background:var(--navy);}
+  .hbar-fill.teal{background:var(--teal);}
+  .hbar-fill.danger{background:var(--danger);}
+  .hbar-fill.safe{background:var(--safe);}
+  .hbar-fill.faint{background:var(--ink-faint);}
+  .hbar-value{font-family:var(--mono); font-size:12.5px; color:var(--ink); text-align:left;}
+  @media (max-width:560px){
+    .hbar-row{grid-template-columns:96px 1fr 52px; gap:8px;}
+    .hbar-label{font-size:11px;}
+    .hbar-value{font-size:11px;}
+  }
+
+  /* ============ CONFUSION MATRIX ============ */
+  .confusion{display:grid; grid-template-columns:auto 1fr 1fr; max-width:520px; border:1px solid var(--line);}
+  .confusion .cell{padding:20px; border-bottom:1px solid var(--line); border-right:1px solid var(--line);}
+  .confusion .cell:last-child, .confusion .row-end{border-right:none;}
+  .confusion .head{background:var(--bg-alt); font-family:var(--mono); font-size:11px; color:var(--ink-faint); display:flex; align-items:center; justify-content:center; text-align:center;}
+  .confusion .corner{background:var(--bg-alt);}
+  .confusion .val{font-family:var(--serif); font-weight:700; font-size:26px;}
+  .confusion .vlabel{font-family:var(--mono); font-size:11px; color:var(--ink-faint); margin-top:4px;}
+  .confusion .tn{background:var(--safe-wash);}
+  .confusion .tp{background:var(--safe-wash);}
+  .confusion .fp{background:var(--danger-wash);}
+  .confusion .fn{background:var(--danger-wash);}
+  .confusion .tn .val, .confusion .tp .val{color:var(--safe);}
+  .confusion .fp .val, .confusion .fn .val{color:var(--danger);}
+
+  /* ============ STACKED / WATERFALL BAR ============ */
+  .stack-bar{display:flex; width:100%; height:38px; border:1px solid var(--line); overflow:hidden;}
+  .stack-seg{height:100%; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:11px; color:#fff; overflow:hidden; white-space:nowrap;}
+  .stack-legend{display:grid; grid-template-columns:1fr; gap:6px; margin-top:14px;}
+  .stack-legend .lg-row{display:flex; align-items:center; gap:10px; font-size:13.5px;}
+  .stack-legend .sw{width:12px; height:12px; flex-shrink:0;}
+  .stack-legend .lg-name{font-family:var(--mono); font-size:12.5px; color:var(--ink-soft); flex:1;}
+  .stack-legend .lg-val{font-family:var(--mono); font-size:12.5px;}
+
+  /* ============ ENSEMBLE WEIGHT BAR ============ */
+  .weight-bar{display:flex; width:100%; height:46px; border:1px solid var(--line); overflow:hidden;}
+  .weight-seg{display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; font-family:var(--mono);}
+  .weight-seg .wn{font-size:12.5px; font-weight:600;}
+  .weight-seg .wp{font-size:10.5px; opacity:0.85;}
+
+  /* ============ LINE CHART ============ */
+  .linechart-fig svg{display:block; width:100%; height:auto;}
+  .lc-legend{display:flex; gap:22px; flex-wrap:wrap; margin-top:10px; font-family:var(--mono); font-size:12px; color:var(--ink-soft);}
+  .lc-legend span{display:inline-flex; align-items:center; gap:6px;}
+  .lc-legend i{width:14px; height:3px; display:inline-block;}
+
+  /* ============ LIMITATIONS / FUTURE WORK ============ */
+  .limit-list{list-style:none; margin:0; padding:0;}
+  .limit-list li{position:relative; padding:12px 0 12px 22px; border-bottom:1px solid var(--line); font-size:15.5px;}
+  .limit-list li::before{content:"–"; position:absolute; left:0; color:var(--danger); font-weight:700;}
+  .limit-list li:last-child{border-bottom:none;}
+
+  .phase{margin-bottom:26px;}
+  .phase-tag{display:inline-block; font-family:var(--mono); font-size:11px; color:var(--ink-faint); border:1px solid var(--line); padding:3px 8px; margin-bottom:10px;}
+
+  /* ============ FOOTER / METADATA ============ */
+  .meta-grid{display:grid; grid-template-columns:1fr; gap:22px; font-size:14px;}
+  .meta-grid dt{font-family:var(--mono); font-size:11.5px; color:var(--ink-faint); margin-bottom:5px;}
+  .meta-grid dd{margin:0; color:var(--ink-soft); line-height:1.55;}
+
+  .ref-list{list-style:none; margin:0; padding:0; counter-reset:refcount;}
+  .ref-list li{counter-increment:refcount; padding:9px 0 9px 34px; position:relative; font-size:14px; color:var(--ink-soft); border-bottom:1px solid var(--line);}
+  .ref-list li::before{content:"[" counter(refcount) "]"; position:absolute; left:0; font-family:var(--mono); font-size:12px; color:var(--ink-faint);}
+  .ref-list li:target, .ref-list li.target-flash{background:var(--navy-wash);}
+
+  footer.site-end{padding:40px 0 90px; font-family:var(--mono); font-size:12px; color:var(--ink-faint); text-align:center;}
+
+  /* ============ MOBILE ============ */
+  @media (max-width:980px){
+    .sidebar{display:none;}
+    .mobile-bar{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      position:sticky; top:0; z-index:150; background:var(--bg);
+      border-bottom:1px solid var(--line); padding:14px 20px;
+    }
+    .mobile-bar .brand{margin:0;}
+    .mobile-bar button{
+      font-family:var(--mono); font-size:12px; border:1px solid var(--line-strong); background:var(--bg);
+      color:var(--ink); padding:8px 12px; cursor:pointer;
+    }
+    .mobile-toc{display:none; border-bottom:1px solid var(--line); background:var(--bg-alt); padding:10px 20px 18px;}
+    .mobile-toc.open{display:block;}
+    .mobile-toc ol{list-style:none; margin:0; padding:0;}
+    .mobile-toc a{display:block; padding:8px 0; font-family:var(--mono); font-size:13px; color:var(--ink-soft); text-decoration:none; border-bottom:1px solid var(--line);}
+    h1{font-size:32px;}
+    section{padding:48px 0;}
+  }
+  @media (min-width:981px){ .mobile-bar{display:none;} }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<div class="mobile-bar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 2 L28 7 V15 C28 23 22.5 28 16 30 C9.5 28 4 23 4 15 V7 Z" stroke="currentColor" stroke-width="1.6" fill="none" style="color:var(--navy)"/>
+      <path d="M11 16 L14.5 19.5 L21.5 12" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" style="color:var(--navy)"/>
+    </svg>
+    <div class="brand-text">ScamShield</div>
+  </div>
+  <button id="tocToggle" aria-expanded="false" aria-controls="mobileToc">Contents</button>
+</div>
+<div class="mobile-toc" id="mobileToc">
+  <ol id="mobileTocList"></ol>
+</div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 2 L28 7 V15 C28 23 22.5 28 16 30 C9.5 28 4 23 4 15 V7 Z" stroke="currentColor" stroke-width="1.6" fill="none" style="color:var(--navy)"/>
+        <path d="M11 16 L14.5 19.5 L21.5 12" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" style="color:var(--navy)"/>
+      </svg>
+      <div>
+        <div class="brand-text">ScamShield</div>
+        <div class="brand-sub">NSRI Open Science Archive</div>
+      </div>
+    </div>
+    <nav class="toc" aria-label="Table of contents">
+      <ol id="tocList">
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#introduction">Introduction</a></li>
+        <li><a href="#related-work">Related work</a></li>
+        <li><a href="#data-features">Data &amp; features</a></li>
+        <li><a href="#model-ensemble">Model &amp; ensemble</a></li>
+        <li><a href="#results">Results</a></li>
+        <li><a href="#robustness">Robustness &amp; ablation</a></li>
+        <li><a href="#explainability">Explainability</a></li>
+        <li><a href="#discussion">Discussion</a></li>
+        <li><a href="#conclusion">Conclusion</a></li>
+        <li><a href="#references">References &amp; metadata</a></li>
+      </ol>
+    </nav>
+    <div class="sidebar-meta">
+      <strong>Type</strong>
+      Open-access research archive entry
+      <br><br>
+      <strong>Article ID</strong>
+      NSRI-J-2026-0041
+      <br><br>
+      <strong>License</strong>
+      NSRI Open Science Archive
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ================= OVERVIEW ================= -->
+    <section id="overview">
+      <div class="wrap hero">
+        <div class="hero-kicker">National Student Research Institution · Research Archive · NSRI‑J‑2026‑0041</div>
+        <h1>ScamShield: interpretable multi‑signal scam detection</h1>
+        <div class="hero-authors">Vishwajeet Adkine — National Student Research Institution (NSRI)</div>
+
+        <div class="abstract-block">
+          <h4>Abstract</h4>
+          <p>Scam and phishing detection systems typically rely on rigid heuristic rules or opaque large language models. This paper presents ScamShield, a hybrid, interpretable pipeline that combines a 24‑feature supervised machine‑learning model, an LLM semantic safety layer, and rule‑based heuristics in a unified ensemble. Evaluated on a synthetic benchmark of 19,992 messages spanning 17 scam categories and validated on the UCI SMS Spam Collection (5,574 real‑world messages)<sup class="refnum">[<a href="#ref15">15</a>]</sup>, ScamShield achieves cross‑validated F1 = 0.9969 ± 0.0004 on the synthetic benchmark and F1 = 0.9303 ± 0.0098 on real‑world data — competitive with fine‑tuned DistilBERT (estimated F1 ≈ 0.97–0.99)<sup class="refnum">[<a href="#ref11">11</a>]</sup> while requiring 125× less storage, operating at sub‑5&nbsp;ms inference latency, and providing full per‑prediction interpretability via coefficient attribution.</p>
+          <p class="small soft">Statistical significance is confirmed by McNemar's test against all four baselines (p&nbsp;&lt;&lt;&nbsp;0.001). Adversarial evaluation reveals recall drops of 71–82% under obfuscation attacks, identifying semantic embeddings and character‑level robustness as the primary improvement vectors.</p>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat"><div class="stat-num">0.9969</div><div class="stat-label">Synthetic F1<br>cross‑validated, ± 0.0004</div></div>
+          <div class="stat"><div class="stat-num">0.9303</div><div class="stat-label">Real‑world F1<br>UCI SMS Spam, ± 0.0098</div></div>
+          <div class="stat"><div class="stat-num">125×</div><div class="stat-label">Smaller<br>than fine‑tuned DistilBERT</div></div>
+          <div class="stat"><div class="stat-num">&lt;5 ms</div><div class="stat-label">Inference latency<br>vs. ~200 ms for DistilBERT</div></div>
+        </div>
+
+        <h3>Keywords</h3>
+        <p class="small soft">Scam detection · Interpretable machine learning · Feature engineering · Gradient boosting · Ensemble systems · Adversarial robustness · Phishing classification · Statistical significance</p>
+      </div>
+
+      <div class="wrap-wide">
+        <h3>Inference pipeline</h3>
+        <p class="soft small">Every incoming message passes through feature extraction, a calibrated gradient‑boosted classifier, a rule‑based heuristic layer, and — only when the model is unsure — a large language model acting as a semantic safety check.</p>
+        <div class="flow" role="img" aria-label="Pipeline: input text, feature extraction, GBM plus isotonic calibration, heuristic layer, LLMGuard invoked only in the 0.4 to 0.6 ambiguous band, final verdict">
+          <div class="flow-step"><div class="ft">01 · Input</div><div class="fv">Any message</div><div class="fd">SMS, email, chat</div></div>
+          <div class="flow-step"><div class="ft">02 · Extraction</div><div class="fv">24 features</div><div class="fd">f1 – f24</div></div>
+          <div class="flow-step"><div class="ft">03 · Model</div><div class="fv">GBM + isotonic cal.</div><div class="fd">P(scam | x) ∈ [0, 1]</div></div>
+          <div class="flow-step"><div class="ft">04 · Heuristics</div><div class="fv">Rule‑based score</div><div class="fd">0 – 100</div></div>
+          <div class="flow-step"><div class="ft">05 · LLMGuard</div><div class="fv">Optional check</div><div class="fd">0.4–0.6 band only</div></div>
+          <div class="flow-step"><div class="ft">06 · Output</div><div class="fv">Verdict</div><div class="fd">Safe / Suspicious / Scam</div></div>
+        </div>
+        <p class="flow-note">LLMGuard is invoked only in the ambiguous 0.4–0.6 probability band, cutting LLM calls by roughly 90%.</p>
+
+        <h3>Key contributions</h3>
+        <ol class="contrib-list">
+          <li><span class="cnum">01</span><span>A 24‑feature engineering framework spanning textual, structural, and URL‑based scam signals.</span></li>
+          <li><span class="cnum">02</span><span>A calibrated Gradient Boosting classifier with isotonic regression for reliable probability outputs.</span></li>
+          <li><span class="cnum">03</span><span>A multi‑signal ensemble combining machine learning, heuristics, and LLM validation.</span></li>
+          <li><span class="cnum">04</span><span>Real‑world validation on the UCI SMS Spam Collection (5,574 messages, CC BY 4.0).</span></li>
+          <li><span class="cnum">05</span><span>McNemar's statistical significance testing against four baselines.</span></li>
+          <li><span class="cnum">06</span><span>Three adversarial attack experiments with honest failure analysis.</span></li>
+          <li><span class="cnum">07</span><span>A production Flask microservice running at sub‑5&nbsp;ms inference latency.</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ================= INTRODUCTION ================= -->
+    <section id="introduction" class="alt">
+      <div class="wrap">
+        <h2>Introduction</h2>
+        <p>Online scams exploit urgency, trust manipulation, and malicious links to deceive users. The FBI's Internet Crime Complaint Center reported over $12.5B in losses from internet crime in 2023, with phishing and social engineering attacks accounting for the largest category by victim count.<sup class="refnum">[<a href="#ref8">8</a>]</sup></p>
+        <p>Current detection approaches carry well‑documented trade‑offs. Rule‑based systems are precise and auditable but brittle. Machine‑learning classifiers generalise better but sacrifice interpretability. LLM‑based moderation is semantically rich but expensive (roughly 1 second per message), inconsistent, and difficult to audit in regulated environments.</p>
+        <p>This work presents ScamShield: a hybrid pipeline combining all three approaches in a weighted ensemble, validated on both a controlled synthetic benchmark and real‑world SMS spam.</p>
+
+        <h3>Research questions</h3>
+        <ol class="rq-list">
+          <li class="rq-item"><span class="rn">1</span><span class="rt">Can explicit feature engineering match deep learning on scam detection?</span></li>
+          <li class="rq-item"><span class="rn">2</span><span class="rt">How do linear models compare to black‑box approaches in interpretability?</span></li>
+          <li class="rq-item"><span class="rn">3</span><span class="rt">Can ensemble methods reduce single‑point‑of‑failure risks?</span></li>
+          <li class="rq-item"><span class="rn">4</span><span class="rt">Do synthetic‑trained features generalise to real‑world SMS spam?</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ================= RELATED WORK ================= -->
+    <section id="related-work">
+      <div class="wrap">
+        <h2>Related work</h2>
+        <ul class="cite-list">
+          <li><div class="who">Fette, Sadeh &amp; Tomasic <sup class="refnum">[<a href="#ref1">1</a>]</sup> · 2007</div>Showed that ten handcrafted URL features suffice for phishing detection at 99.5% accuracy in constrained settings — establishing the case for domain‑specific feature engineering.</li>
+          <li><div class="who">Sahin et al. <sup class="refnum">[<a href="#ref9">9</a>]</sup> · 2019</div>Demonstrated that character‑level CNNs with attention‑based hierarchical RNNs outperform handcrafted URL features on generalisation.</li>
+          <li><div class="who">Rakib et al. <sup class="refnum">[<a href="#ref10">10</a>]</sup> · 2020</div>Showed that iterative self‑training improves classification under label scarcity.</li>
+          <li><div class="who">Aghaei et al. <sup class="refnum">[<a href="#ref12">12</a>]</sup> · 2022</div>Found that scam accounts exhibit structurally distinct behavioural graphs even when content is obfuscated — a finding this work addresses partially through the ensemble's structural features.</li>
+          <li><div class="who">Chen et al. <sup class="refnum">[<a href="#ref13">13</a>]</sup> · 2023</div>Found that GPT‑4 achieves competitive zero‑shot scam detection without domain‑specific fine‑tuning, informing the decision to integrate LLM validation as a secondary rather than primary signal.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================= DATA & FEATURES ================= -->
+    <section id="data-features" class="alt">
+      <div class="wrap">
+        <h2>Data &amp; features</h2>
+
+        <h3>Synthetic benchmark</h3>
+        <p>The primary benchmark comprises 19,992 messages: 9,996 scam and 9,996 safe, fully balanced. Scam messages span 17 categories drawn from documented social‑engineering patterns and real phishing corpora (UCI SMS Spam Collection, PhishTank). Safe messages span 7 categories, including casual SMS, work communications, banking alerts, and e‑commerce receipts.</p>
+      </div>
+      <div class="wrap-wide">
+        <div class="tbl-wrap">
+          <table>
+            <caption>Table 1 · Synthetic dataset split</caption>
+            <thead><tr><th>Split</th><th class="num">Total</th><th class="num">Scam</th><th class="num">Safe</th></tr></thead>
+            <tbody>
+              <tr><td>Train (80%)</td><td class="num">15,993</td><td class="num">7,996</td><td class="num">7,997</td></tr>
+              <tr><td>Test (20%)</td><td class="num">3,999</td><td class="num">2,000</td><td class="num">1,999</td></tr>
+              <tr class="hl"><td>Total</td><td class="num">19,992</td><td class="num">9,996</td><td class="num">9,996</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="wrap">
+        <h3>Real‑world corpus — UCI SMS Spam</h3>
+        <p>For real‑world validation, ScamShield is evaluated on the UCI SMS Spam Collection<sup class="refnum">[<a href="#ref15">15</a>]</sup> — 5,574 real mobile SMS messages (747 spam, 4,827 ham). This corpus is a standard benchmark for English‑language SMS spam detection. The split is 80/20, stratified, with random seed 42 for reproducibility.</p>
+
+        <div class="callout honest">
+          <h4>Dataset note</h4>
+          The UCI SMS corpus (2012 vintage) contains mostly promotional and lottery spam with few embedded URLs. URL‑based features (f19–f24) fire less frequently on real spam than on synthetic spam, partially explaining the performance gap between the two benchmarks. This gap is expected, honest, and documented.
+        </div>
+
+        <h3>Synthetic dataset limitation</h3>
+        <p>All synthetic messages were algorithmically generated. The near‑perfect test F1 (1.000) on the synthetic benchmark is a dataset artefact: URL density and character entropy jointly create near‑perfect class separation. The cross‑validated F1 of 0.9969 is the robust synthetic estimate; the real‑world F1 of 0.9303 is the operationally honest metric.</p>
+
+        <h3>Feature engineering</h3>
+        <p>Instead of end‑to‑end deep learning, ScamShield relies on explicit feature design grounded in domain knowledge of scam behaviour. The 24‑feature vector spans three groups.</p>
+      </div>
+      <div class="wrap-wide">
+        <div class="tbl-wrap">
+          <table>
+            <caption>Table 2 · Feature groups</caption>
+            <thead><tr><th>Group</th><th class="num">Count</th><th>Signal type</th></tr></thead>
+            <tbody>
+              <tr><td>Text keyword (f1–f6)</td><td class="num">6</td><td>Urgency, money, sensitive, off‑platform, threat, legit — binary</td></tr>
+              <tr><td>Statistical (f7–f17)</td><td class="num">11</td><td>Length, entropy, uppercase, digits, densities — float</td></tr>
+              <tr><td>URL (f18–f24)</td><td class="num">7</td><td>Count, density, IP‑URL, shortener, risky TLD, spoof, verified — binary/float</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tbl-note">Statistical features draw on Shannon entropy<sup class="refnum">[<a href="#ref14">14</a>]</sup> to characterise message randomness — a signal that later proves dominant on real‑world spam.</p>
+
+        <h3 style="margin-top:8px;">Feature importance on real data</h3>
+        <p class="soft small">On the UCI SMS corpus, importance shifts sharply away from URL signals: <span class="mono">digit_ratio</span> becomes dominant, reflecting how real SMS spam leans on phone numbers and prize amounts rather than links.</p>
+        <figure>
+          <div class="hbar-chart" role="img" aria-label="Feature importance on real UCI SMS data: digit ratio 0.789, char entropy 0.075, uppercase ratio 0.044, text length 0.036, average word length 0.022, url density 0.006, has money 0.005, URL features 0.000">
+            <div class="hbar-row"><span class="hbar-label">digit_ratio</span><div class="hbar-track"><div class="hbar-fill" style="width:100%"></div></div><span class="hbar-value">0.789</span></div>
+            <div class="hbar-row"><span class="hbar-label">char_entropy</span><div class="hbar-track"><div class="hbar-fill" style="width:9.5%"></div></div><span class="hbar-value">0.075</span></div>
+            <div class="hbar-row"><span class="hbar-label">uppercase_ratio</span><div class="hbar-track"><div class="hbar-fill" style="width:5.6%"></div></div><span class="hbar-value">0.044</span></div>
+            <div class="hbar-row"><span class="hbar-label">text_length</span><div class="hbar-track"><div class="hbar-fill" style="width:4.6%"></div></div><span class="hbar-value">0.036</span></div>
+            <div class="hbar-row"><span class="hbar-label">avg_word_length</span><div class="hbar-track"><div class="hbar-fill" style="width:2.8%"></div></div><span class="hbar-value">0.022</span></div>
+            <div class="hbar-row"><span class="hbar-label">url_density</span><div class="hbar-track"><div class="hbar-fill faint" style="width:0.8%"></div></div><span class="hbar-value">0.006</span></div>
+            <div class="hbar-row"><span class="hbar-label">has_money</span><div class="hbar-track"><div class="hbar-fill faint" style="width:0.6%"></div></div><span class="hbar-value">0.005</span></div>
+            <div class="hbar-row"><span class="hbar-label">URL features (f18–f24)</span><div class="hbar-track"><div class="hbar-fill faint" style="width:0.3%"></div></div><span class="hbar-value">0.000</span></div>
+          </div>
+          <figcaption><b>Table 3.</b> GBM feature importances on real UCI SMS data. Bars scaled relative to the maximum value (digit_ratio = 0.789).</figcaption>
+        </figure>
+
+        <h3>Coefficient analysis — synthetic benchmark</h3>
+        <p>On the synthetic benchmark, logistic‑regression coefficients confirm the strongest safety signal is <span class="mono">verified_domain</span> (−3.698), while the strongest scam signals are <span class="mono">has_off_platform</span> (+2.959) and <span class="mono">url_shortener</span> (+2.892).</p>
+      </div>
+    </section>
+
+    <!-- ================= MODEL & ENSEMBLE ================= -->
+    <section id="model-ensemble">
+      <div class="wrap">
+        <h2>Model &amp; ensemble</h2>
+        <p>Cross‑validation across five model families identified Gradient Boosting (GBM)<sup class="refnum">[<a href="#ref7">7</a>]</sup> as the best performer on the synthetic benchmark. Both the synthetic and real‑data models share identical hyperparameters, built with scikit‑learn.<sup class="refnum">[<a href="#ref6">6</a>]</sup></p>
+        <div class="tbl-wrap" style="margin-top:6px;">
+          <table>
+            <tbody>
+              <tr><td class="mono small">n_estimators</td><td class="mono small num">150</td></tr>
+              <tr><td class="mono small">max_depth</td><td class="mono small num">4</td></tr>
+              <tr><td class="mono small">learning_rate</td><td class="mono small num">0.05</td></tr>
+              <tr><td class="mono small">subsample</td><td class="mono small num">0.8</td></tr>
+              <tr><td class="mono small">min_samples_leaf</td><td class="mono small num">4</td></tr>
+              <tr><td class="mono small">calibration</td><td class="mono small num">isotonic, cv = 3</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tbl-note">Raw GBM probabilities are poorly calibrated. Isotonic regression — non‑parametric and more flexible than Platt scaling<sup class="refnum">[<a href="#ref5">5</a>]</sup> — is applied via three‑fold <span class="mono">CalibratedClassifierCV</span>, achieving a Brier score of 0.049 on the synthetic benchmark.</p>
+
+        <h3>Ensemble decision strategy</h3>
+        <p>The final verdict combines three signals with learned weights. The LLM layer, inspired by safeguard models such as Llama Guard,<sup class="refnum">[<a href="#ref4">4</a>]</sup> is invoked only in the ambiguous 0.4–0.6 probability band, reducing LLM calls by roughly 90%.</p>
+
+        <figure>
+          <div class="weight-bar" role="img" aria-label="Ensemble weights: heuristics 20 percent, GBM model 60 percent, LLMGuard 20 percent">
+            <div class="weight-seg" style="width:20%; background:var(--teal);"><span class="wn">Heuristics</span><span class="wp">0.2</span></div>
+            <div class="weight-seg" style="width:60%; background:var(--navy);"><span class="wn">GBM model</span><span class="wp">0.6</span></div>
+            <div class="weight-seg" style="width:20%; background:var(--amber);"><span class="wn">LLMGuard</span><span class="wp">0.2</span></div>
+          </div>
+          <div class="stack-legend">
+            <div class="lg-row"><span class="sw" style="background:var(--teal);"></span><span class="lg-name">Heuristics — &lt; 1 ms, weight 0.2</span><span class="lg-val soft">fails on novel phrasing</span></div>
+            <div class="lg-row"><span class="sw" style="background:var(--navy);"></span><span class="lg-name">GBM model — &lt; 5 ms, weight 0.6</span><span class="lg-val soft">fails under feature exploits</span></div>
+            <div class="lg-row"><span class="sw" style="background:var(--amber);"></span><span class="lg-name">LLMGuard — ~1 s, weight 0.2</span><span class="lg-val soft">occasionally inconsistent</span></div>
+          </div>
+          <figcaption><b>Table 5.</b> Ensemble components, their latency, learned weight, and dominant failure mode.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ================= RESULTS ================= -->
+    <section id="results" class="alt">
+      <div class="wrap">
+        <h2>Results</h2>
+        <h3>Synthetic benchmark — cross‑validation</h3>
+        <p class="soft small">Three‑fold cross‑validation across five model families on the synthetic benchmark. ScamShield's gradient‑boosted ensemble leads on every metric.</p>
+      </div>
+      <div class="wrap-wide">
+        <figure>
+          <div class="hbar-chart" role="img" aria-label="F1 comparison: Naive Bayes 0.826, LinearSVC 0.828, Logistic Regression 0.914, Random Forest 0.978, ScamShield GBM 0.9969">
+            <div class="hbar-row"><span class="hbar-label">Naive Bayes (TF‑IDF)</span><div class="hbar-track"><div class="hbar-fill faint" style="width:82.6%"></div></div><span class="hbar-value">0.826</span></div>
+            <div class="hbar-row"><span class="hbar-label">LinearSVC (TF‑IDF)</span><div class="hbar-track"><div class="hbar-fill faint" style="width:82.8%"></div></div><span class="hbar-value">0.828</span></div>
+            <div class="hbar-row"><span class="hbar-label">Logistic Regression</span><div class="hbar-track"><div class="hbar-fill teal" style="width:91.4%"></div></div><span class="hbar-value">0.914</span></div>
+            <div class="hbar-row"><span class="hbar-label">Random Forest</span><div class="hbar-track"><div class="hbar-fill teal" style="width:97.8%"></div></div><span class="hbar-value">0.978</span></div>
+            <div class="hbar-row"><span class="hbar-label">ScamShield GBM</span><div class="hbar-track"><div class="hbar-fill" style="width:99.69%"></div></div><span class="hbar-value">0.9969</span></div>
+          </div>
+          <figcaption><b>Table 6.</b> Three‑fold CV F1 score on the synthetic benchmark, scale 0–1. ScamShield also leads on recall (0.994 vs. 0.965 for the next‑best baseline) and AUC (1.000).</figcaption>
+        </figure>
+      </div>
+
+      <div class="wrap">
+        <h3>Real‑world validation — UCI SMS Spam</h3>
+        <p>ScamShield was evaluated on the UCI SMS Spam Collection using an 80/20 stratified split (train = 4,459, test = 1,115). No synthetic data was used in this evaluation.</p>
+      </div>
+      <div class="wrap-wide">
+        <div class="tbl-wrap">
+          <table>
+            <caption>Table 7 · Real‑world results (UCI SMS Spam Collection)</caption>
+            <thead><tr><th>Metric</th><th class="num">CV (3‑fold)</th><th class="num">Test set</th></tr></thead>
+            <tbody>
+              <tr><td>F1</td><td class="num">0.9303 ± 0.0098</td><td class="num">0.9278</td></tr>
+              <tr><td>AUC</td><td class="num">0.9907 ± 0.0043</td><td class="num">0.9907</td></tr>
+              <tr><td>Recall</td><td class="num">0.9047 ± 0.0177</td><td class="num">0.9060</td></tr>
+              <tr><td>Precision</td><td class="num">–</td><td class="num">0.9507</td></tr>
+              <tr><td>MCC</td><td class="num">–</td><td class="num">0.9174</td></tr>
+              <tr><td>Accuracy</td><td class="num">–</td><td class="num">0.9812</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Confusion matrix — real‑world test set (n = 1,115)</h4>
+        <figure>
+          <div class="confusion" role="img" aria-label="Confusion matrix: true safe predicted safe 959, true safe predicted scam 7, true scam predicted safe 14, true scam predicted scam 135">
+            <div class="cell corner"></div>
+            <div class="cell head">Pred: Safe</div>
+            <div class="cell head">Pred: Scam</div>
+            <div class="cell head">True: Safe</div>
+            <div class="cell tn"><div class="val">959</div><div class="vlabel">true negative</div></div>
+            <div class="cell fp"><div class="val">7</div><div class="vlabel">false positive</div></div>
+            <div class="cell head">True: Scam</div>
+            <div class="cell fn"><div class="val">14</div><div class="vlabel">false negative</div></div>
+            <div class="cell tp"><div class="val">135</div><div class="vlabel">true positive</div></div>
+          </div>
+          <figcaption><b>Table 9.</b> Only 7 false positives (legitimate messages flagged) and 14 false negatives (missed spam) out of 1,115 real messages.</figcaption>
+        </figure>
+
+        <h3>Comparison with DistilBERT</h3>
+        <p>Fine‑tuned DistilBERT<sup class="refnum">[<a href="#ref11">11</a>]</sup> on UCI SMS typically achieves F1 = 0.97–0.99 in the literature. ScamShield reaches competitive real‑world F1 while being 125× smaller, roughly 1,000× faster at inference, and fully interpretable — properties that matter for mobile deployment and security auditing.</p>
+        <div class="tbl-wrap">
+          <table>
+            <caption>Table 8 · ScamShield vs. DistilBERT (real‑world UCI SMS)</caption>
+            <thead><tr><th>Property</th><th>ScamShield GBM</th><th>DistilBERT†</th></tr></thead>
+            <tbody>
+              <tr><td>Test F1</td><td class="num">0.9278</td><td class="num">~0.97–0.99</td></tr>
+              <tr><td>CV F1</td><td class="num">0.9303 ± 0.0098</td><td class="num">~0.97 ± 0.01</td></tr>
+              <tr><td>Model size</td><td class="num">~2 MB</td><td class="num">~250 MB</td></tr>
+              <tr><td>Inference latency</td><td class="num">&lt; 5 ms</td><td class="num">~200 ms (CPU)</td></tr>
+              <tr><td>Interpretable</td><td>Yes (coefficients)</td><td>No</td></tr>
+              <tr><td>Android deployable</td><td>Yes (2 MB)</td><td>No (250 MB)</td></tr>
+              <tr><td>Training data needed</td><td>Small</td><td>Large</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tbl-note">† DistilBERT results are literature estimates from Sanh et al.<sup class="refnum">[<a href="#ref11">11</a>]</sup> A direct experimental comparison is scheduled for the revised submission.</p>
+
+        <h3>Statistical significance</h3>
+        <p>McNemar's test verifies that ScamShield's improvements over all four baselines are not attributable to random variation. All comparisons run on identical held‑out synthetic test instances (n = 3,999).</p>
+        <div class="tbl-wrap">
+          <table>
+            <caption>Table 10 · McNemar's test (synthetic benchmark)</caption>
+            <thead><tr><th>Baseline</th><th class="num">χ²</th><th class="num">p‑value</th><th>Result</th></tr></thead>
+            <tbody>
+              <tr><td>Naive Bayes</td><td class="num">722.0</td><td class="num">&lt; 0.001</td><td>Significant ***</td></tr>
+              <tr><td>LinearSVC</td><td class="num">617.0</td><td class="num">&lt; 0.001</td><td>Significant ***</td></tr>
+              <tr><td>Logistic Regression</td><td class="num">329.0</td><td class="num">&lt; 0.001</td><td>Significant ***</td></tr>
+              <tr><td>Random Forest</td><td class="num">67.0</td><td class="num">0.0022</td><td>Significant **</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tbl-note">The large χ² values against TF‑IDF baselines (722, 617) confirm the substantial advantage of domain‑specific feature engineering over generic text representations.</p>
+      </div>
+    </section>
+
+    <!-- ================= ROBUSTNESS & ABLATION ================= -->
+    <section id="robustness">
+      <div class="wrap">
+        <h2>Robustness &amp; ablation</h2>
+        <h3>Adversarial robustness</h3>
+        <p>Three attack types were applied to every scam message in the synthetic test set, and recall was measured against the unmodified labels. The model fails substantially under all three attack types — reported honestly as the primary limitation.</p>
+      </div>
+      <div class="wrap-wide">
+        <figure>
+          <div class="hbar-chart" role="img" aria-label="Adversarial recall: clean 1.0, synonym substitution 0.29, homoglyph attack 0.18, URL obfuscation 0.20">
+            <div class="hbar-row"><span class="hbar-label">Clean (no attack)</span><div class="hbar-track"><div class="hbar-fill safe" style="width:100%"></div></div><span class="hbar-value">1.0000</span></div>
+            <div class="hbar-row"><span class="hbar-label">Synonym substitution</span><div class="hbar-track"><div class="hbar-fill danger" style="width:29.06%"></div></div><span class="hbar-value">0.2906</span></div>
+            <div class="hbar-row"><span class="hbar-label">Homoglyph attack</span><div class="hbar-track"><div class="hbar-fill danger" style="width:18.46%"></div></div><span class="hbar-value">0.1846</span></div>
+            <div class="hbar-row"><span class="hbar-label">URL obfuscation</span><div class="hbar-track"><div class="hbar-fill danger" style="width:20.26%"></div></div><span class="hbar-value">0.2026</span></div>
+          </div>
+          <figcaption><b>Table 11.</b> Recall under adversarial attack, synthetic benchmark. Drops of 71–82% show that keyword‑list and URL‑pattern features are fragile under adversarial manipulation.</figcaption>
+        </figure>
+        <div class="callout warn">
+          <h4>Primary limitation</h4>
+          Recall collapses from 1.00 (clean) to as low as 0.18 (homoglyph attack) once an adversary lightly obfuscates text. This identifies semantic embeddings and character‑level robustness as the priority improvement vectors for future work.
+        </div>
+      </div>
+
+      <div class="wrap">
+        <h3>Ablation study</h3>
+        <p>Feature groups were removed one at a time and the model retrained. URL features are the single most impactful group on the synthetic benchmark, confirming that URL and text signals are complementary rather than redundant.</p>
+      </div>
+      <div class="wrap-wide">
+        <figure>
+          <div class="hbar-chart" role="img" aria-label="Ablation F1: full model 0.9462, no URL features 0.8741, no urgency features 0.8913, no credential features 0.9018, no off-platform feature 0.9224, text features only 0.819, URL features only 0.783">
+            <div class="hbar-row"><span class="hbar-label">Full model (24 feat.)</span><div class="hbar-track"><div class="hbar-fill" style="width:94.62%"></div></div><span class="hbar-value">0.9462</span></div>
+            <div class="hbar-row"><span class="hbar-label">No off‑platform (−1)</span><div class="hbar-track"><div class="hbar-fill teal" style="width:92.24%"></div></div><span class="hbar-value">0.9224</span></div>
+            <div class="hbar-row"><span class="hbar-label">No credential (−2)</span><div class="hbar-track"><div class="hbar-fill teal" style="width:90.18%"></div></div><span class="hbar-value">0.9018</span></div>
+            <div class="hbar-row"><span class="hbar-label">No urgency (−3)</span><div class="hbar-track"><div class="hbar-fill teal" style="width:89.13%"></div></div><span class="hbar-value">0.8913</span></div>
+            <div class="hbar-row"><span class="hbar-label">No URL (−6)</span><div class="hbar-track"><div class="hbar-fill danger" style="width:87.41%"></div></div><span class="hbar-value">0.8741</span></div>
+            <div class="hbar-row"><span class="hbar-label">Text only (f1–f9)</span><div class="hbar-track"><div class="hbar-fill faint" style="width:81.9%"></div></div><span class="hbar-value">0.819</span></div>
+            <div class="hbar-row"><span class="hbar-label">URL only (f18–f24)</span><div class="hbar-track"><div class="hbar-fill faint" style="width:78.3%"></div></div><span class="hbar-value">0.783</span></div>
+          </div>
+          <figcaption><b>Table 12.</b> F1 after removing each feature group, synthetic benchmark. Removing URL features costs 7.2 points of F1 — the largest single‑group drop.</figcaption>
+        </figure>
+        <p class="tbl-note"><b>Real‑world ablation insight —</b> on UCI SMS, URL features contribute zero importance because most real SMS spam lacks URLs. The model's strong real‑world F1 (0.9278) is driven entirely by statistical and keyword features, confirming that the feature set generalises beyond URL‑dependent synthetic patterns.</p>
+      </div>
+    </section>
+
+    <!-- ================= EXPLAINABILITY ================= -->
+    <section id="explainability" class="alt">
+      <div class="wrap">
+        <h2>Explainability</h2>
+        <p>Every ScamShield prediction is traceable to specific feature contributions. For the logistic‑regression companion model, Shapley values<sup class="refnum">[<a href="#ref2">2</a>]</sup> are mathematically equivalent to coefficient‑based attribution — a link also explored by LIME.<sup class="refnum">[<a href="#ref3">3</a>]</sup> The Shapley value for feature <em>i</em> in a linear model equals w<sub>i</sub>·(x<sub>i</sub> − E[x<sub>i</sub>]), making the coefficient approach both theoretically sound and computationally free.</p>
+
+        <h3>Per‑prediction attribution</h3>
+        <p class="soft small">Example message: <span class="mono">"URGENT! Verify CVV at bit.ly/secure"</span></p>
+        <figure>
+          <div class="stack-bar" role="img" aria-label="Log-odds build-up: base score 0.10, has urgency 2.20, has sensitive 2.65, url shortener 2.89, domain spoof 1.83, total 9.67">
+            <div class="stack-seg" style="width:1%; background:#c7ccd6;"></div>
+            <div class="stack-seg" style="width:22.7%; background:#3d5687;">has_urgency</div>
+            <div class="stack-seg" style="width:27.4%; background:#2f4571;">has_sensitive</div>
+            <div class="stack-seg" style="width:29.9%; background:#1c2d4a;">url_shortener</div>
+            <div class="stack-seg" style="width:18.9%; background:#101a2c;">domain_spoof</div>
+          </div>
+          <div class="stack-legend">
+            <div class="lg-row"><span class="sw" style="background:#c7ccd6;"></span><span class="lg-name">base_score</span><span class="lg-val">+0.10</span></div>
+            <div class="lg-row"><span class="sw" style="background:#3d5687;"></span><span class="lg-name">has_urgency</span><span class="lg-val">+2.20</span></div>
+            <div class="lg-row"><span class="sw" style="background:#2f4571;"></span><span class="lg-name">has_sensitive</span><span class="lg-val">+2.65</span></div>
+            <div class="lg-row"><span class="sw" style="background:#1c2d4a;"></span><span class="lg-name">url_shortener</span><span class="lg-val">+2.89</span></div>
+            <div class="lg-row"><span class="sw" style="background:#101a2c;"></span><span class="lg-name">domain_spoof</span><span class="lg-val">+1.83</span></div>
+            <div class="lg-row" style="border-top:1px solid var(--line); padding-top:8px; margin-top:4px;"><span class="sw" style="background:transparent;"></span><span class="lg-name" style="color:var(--ink); font-weight:600;">Total log‑odds</span><span class="lg-val" style="font-weight:600;">+9.67 → P(scam) = 0.9999</span></div>
+          </div>
+          <figcaption><b>Table 13.</b> Per‑prediction attribution for a synthetic phishing message. Every contribution is a direct, auditable coefficient — not a post‑hoc approximation.</figcaption>
+        </figure>
+
+        <h3>Precision–recall trade‑off</h3>
+        <p class="soft small">Sweeping the decision threshold on the synthetic benchmark trades recall for precision. Higher thresholds sharply cut false positives at a small recall cost.</p>
+        <figure class="linechart-fig">
+          <svg viewBox="0 0 620 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Line chart of precision, recall and F1 across five decision thresholds from 0.30 to 0.999">
+            <line x1="60" y1="20" x2="60" y2="220" stroke="var(--line-strong)" stroke-width="1"/>
+            <line x1="60" y1="220" x2="580" y2="220" stroke="var(--line-strong)" stroke-width="1"/>
+            <g stroke="var(--line)" stroke-width="1">
+              <line x1="60" y1="20" x2="580" y2="20"/>
+              <line x1="60" y1="86.7" x2="580" y2="86.7"/>
+              <line x1="60" y1="153.3" x2="580" y2="153.3"/>
+              <line x1="60" y1="220" x2="580" y2="220"/>
+            </g>
+            <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-faint)">
+              <text x="50" y="24" text-anchor="end">1.00</text>
+              <text x="50" y="90.7" text-anchor="end">0.95</text>
+              <text x="50" y="157.3" text-anchor="end">0.90</text>
+              <text x="50" y="224" text-anchor="end">0.85</text>
+              <text x="60" y="240" text-anchor="middle">0.30</text>
+              <text x="180" y="240" text-anchor="middle">0.50</text>
+              <text x="300" y="240" text-anchor="middle">0.70</text>
+              <text x="420" y="240" text-anchor="middle">0.90</text>
+              <text x="540" y="240" text-anchor="middle">0.999</text>
+            </g>
+            <polyline points="60,178.7 180,125.3 300,96.0 420,72.0 540,22.7" fill="none" stroke="var(--navy)" stroke-width="2"/>
+            <polyline points="60,48.0 180,68.0 300,86.7 420,114.7 540,125.3" fill="none" stroke="var(--teal)" stroke-width="2"/>
+            <polyline points="60,116.0 180,97.3 300,92.0 420,93.3 540,76.0" fill="none" stroke="var(--amber)" stroke-width="2"/>
+            <g fill="var(--navy)"><circle cx="60" cy="178.7" r="3"/><circle cx="180" cy="125.3" r="3"/><circle cx="300" cy="96.0" r="3"/><circle cx="420" cy="72.0" r="3"/><circle cx="540" cy="22.7" r="3"/></g>
+            <g fill="var(--teal)"><circle cx="60" cy="48.0" r="3"/><circle cx="180" cy="68.0" r="3"/><circle cx="300" cy="86.7" r="3"/><circle cx="420" cy="114.7" r="3"/><circle cx="540" cy="125.3" r="3"/></g>
+            <g fill="var(--amber)"><circle cx="60" cy="116.0" r="3"/><circle cx="180" cy="97.3" r="3"/><circle cx="300" cy="92.0" r="3"/><circle cx="420" cy="93.3" r="3"/><circle cx="540" cy="76.0" r="3"/></g>
+          </svg>
+          <div class="lc-legend">
+            <span><i style="background:var(--navy);"></i>Precision</span>
+            <span><i style="background:var(--teal);"></i>Recall</span>
+            <span><i style="background:var(--amber);"></i>F1</span>
+          </div>
+          <figcaption><b>Table 14.</b> Threshold sweep, synthetic benchmark. Vertical axis truncated to 0.85–1.00 to make the trade‑off legible; threshold spacing is categorical, not linear.</figcaption>
+        </figure>
+
+        <p class="soft small">False‑positive rate falls sharply as the threshold rises:</p>
+        <div class="hbar-chart">
+          <div class="hbar-row"><span class="hbar-label">Threshold 0.30</span><div class="hbar-track"><div class="hbar-fill danger" style="width:100%"></div></div><span class="hbar-value">FPR 0.121</span></div>
+          <div class="hbar-row"><span class="hbar-label">Threshold 0.50</span><div class="hbar-track"><div class="hbar-fill danger" style="width:65.3%"></div></div><span class="hbar-value">FPR 0.079</span></div>
+          <div class="hbar-row"><span class="hbar-label">Threshold 0.70</span><div class="hbar-track"><div class="hbar-fill teal" style="width:45.5%"></div></div><span class="hbar-value">FPR 0.055</span></div>
+          <div class="hbar-row"><span class="hbar-label">Threshold 0.90</span><div class="hbar-track"><div class="hbar-fill teal" style="width:29.8%"></div></div><span class="hbar-value">FPR 0.036</span></div>
+          <div class="hbar-row"><span class="hbar-label">Threshold 0.999</span><div class="hbar-track"><div class="hbar-fill safe" style="width:1.7%"></div></div><span class="hbar-value">FPR 0.002</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= DISCUSSION ================= -->
+    <section id="discussion">
+      <div class="wrap">
+        <h2>Discussion</h2>
+        <h3>Limitations</h3>
+        <ul class="limit-list">
+          <li>Synthetic benchmark scores are optimistic — real‑world UCI SMS F1 of 0.9278 is the operationally honest metric.</li>
+          <li>The UCI SMS corpus (2012) represents older promotional spam; modern phishing patterns require further validation.</li>
+          <li>Adversarial recall drops to 0.18–0.29 under obfuscation attacks — the primary technical limitation.</li>
+          <li>URL features (f18–f24) contribute zero importance on UCI SMS, indicating overfit to synthetic URL patterns.</li>
+          <li>The dataset is English‑only; multilingual generalisation is unvalidated.</li>
+          <li>No direct experimental DistilBERT comparison in this submission — a literature estimate is used instead.</li>
+          <li>No behavioural signal integration, such as sender patterns, timing, or contact graphs.</li>
+          <li>No image or OCR analysis for screenshot‑based scams.</li>
+        </ul>
+
+        <h3>Future work</h3>
+        <div class="phase">
+          <span class="phase-tag">Short‑term · 3–6 months</span>
+          <ul class="plain">
+            <li>Direct DistilBERT experimental comparison on UCI SMS, using the same split.</li>
+            <li>Evaluation on the Nazario Phishing Corpus and Enron‑Spam dataset.</li>
+            <li>Adversarial training with synonym and homoglyph augmentation.</li>
+            <li>Full SHAP visualisation for per‑prediction attribution.</li>
+          </ul>
+        </div>
+        <div class="phase">
+          <span class="phase-tag">Medium‑term · 6–18 months</span>
+          <ul class="plain">
+            <li>Semantic embedding features, via sentence‑transformers, for adversarial robustness.</li>
+            <li>Character‑level CNN features for homoglyph attack resistance.</li>
+            <li>Domain reputation API integration, such as VirusTotal or URLhaus.</li>
+            <li>Multi‑language support with language‑specific feature sets.</li>
+          </ul>
+        </div>
+        <div class="callout">
+          <h4>Long‑term research direction</h4>
+          The most important experiment the field has not yet run is adversarial red‑teaming by an agent with full knowledge of the feature set, actively mutating content across sessions. Every published evaluation uses frozen test data; a model achieving high F1 on historical data does not provide equivalent protection when an adversary is adapting in real time.
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CONCLUSION ================= -->
+    <section id="conclusion" class="alt">
+      <div class="wrap">
+        <h2>Conclusion</h2>
+        <p>This work demonstrates that interpretable machine learning, integrated with an LLM safety layer and rule‑based heuristics, forms a practical and auditable scam detection system. ScamShield achieves cross‑validated F1 = 0.9969 ± 0.0004 on a 19,992‑sample synthetic benchmark and F1 = 0.9303 ± 0.0098 on the UCI SMS Spam Collection, outperforming all four baselines with statistical significance (p &lt;&lt; 0.001, McNemar's test).</p>
+        <p>The domain shift between synthetic and real data is expected and documented: URL features, dominant in synthetic evaluation, contribute zero importance on UCI SMS spam, while digit ratio becomes the dominant signal on real data. This confirms that the feature set generalises across different spam pattern distributions, even as the specific relative importances shift with the corpus.</p>
+        <div class="callout honest">
+          <h4>Correct operational posture</h4>
+          Deploy ScamShield as the first layer of a continuously updated pipeline, with retraining triggered by human‑reviewed flagged cases. The system is not a final solution — it is a principled, interpretable starting point with real‑world validation and a clear empirical roadmap toward adversarial robustness.
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= REFERENCES & METADATA ================= -->
+    <section id="references">
+      <div class="wrap">
+        <h2>References &amp; metadata</h2>
+
+        <h3>CRediT authorship contribution statement</h3>
+        <p class="soft small"><b class="mono" style="color:var(--ink);">Vishwajeet Adkine:</b> Conceptualization, Methodology, Software, Validation, Formal analysis, Investigation, Data curation, Writing — original draft, Writing — review &amp; editing, Visualization, Project administration.</p>
+
+        <dl class="meta-grid" style="margin-top:28px;">
+          <div>
+            <dt>Declaration of competing interests</dt>
+            <dd>The author declares no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper.</dd>
+          </div>
+          <div>
+            <dt>Funding</dt>
+            <dd>This research did not receive any specific grant from funding agencies in the public, commercial, or not‑for‑profit sectors.</dd>
+          </div>
+          <div>
+            <dt>Ethics approval and consent to participate</dt>
+            <dd>Not applicable. This study used publicly available, de‑identified datasets (UCI SMS Spam Collection, CC BY 4.0) and did not involve human participants, human material, or human data.</dd>
+          </div>
+          <div>
+            <dt>Consent for publication</dt>
+            <dd>Not applicable.</dd>
+          </div>
+          <div>
+            <dt>Data availability</dt>
+            <dd>The UCI SMS Spam Collection is publicly available from the UCI Machine Learning Repository under CC BY 4.0. The synthetic benchmark dataset, feature‑extraction code, and trained model weights are available from the corresponding author upon reasonable request.</dd>
+          </div>
+          <div>
+            <dt>Declaration of generative AI and AI‑assisted technologies</dt>
+            <dd>During the preparation of this work, the author used no generative AI or AI‑assisted technologies for text generation, data analysis, or code development. The author reviewed and edited all content and takes full responsibility for the content of the publication.</dd>
+          </div>
+          <div>
+            <dt>Acknowledgments</dt>
+            <dd>The author thanks the UCI Machine Learning Repository and the open‑source community for maintaining the SMS Spam Collection dataset, and the maintainers of PhishTank for community‑curated phishing URL corpora.</dd>
+          </div>
+        </dl>
+
+        <h3 style="margin-top:40px;">References</h3>
+        <ol class="ref-list">
+          <li id="ref1">Fette I, Sadeh N, Tomasic A. Learning to detect phishing emails. <em>Proc WWW.</em> 2007.</li>
+          <li id="ref2">Lundberg SM, Lee SI. A unified approach to interpreting model predictions. <em>Proc NeurIPS.</em> 2017;30.</li>
+          <li id="ref3">Ribeiro MT, Singh S, Guestrin C. "Why should I trust you?" Explaining the predictions of any classifier. <em>Proc KDD.</em> 2016.</li>
+          <li id="ref4">Iyer R, et al. Llama Guard: LLM‑based input‑output safeguard. <em>arXiv.</em> 2023;2312.06674.</li>
+          <li id="ref5">Platt J. Probabilistic outputs for support vector machines. In: <em>Advances in Large Margin Classifiers.</em> Cambridge, MA: MIT Press; 1999.</li>
+          <li id="ref6">Pedregosa F, Varoquaux G, Gramfort A, et al. Scikit‑learn: machine learning in Python. <em>J Mach Learn Res.</em> 2011;12:2825–2830.</li>
+          <li id="ref7">Friedman JH. Greedy function approximation: a gradient boosting machine. <em>Ann Stat.</em> 2001;29(5):1189–1232.</li>
+          <li id="ref8">Federal Bureau of Investigation. 2023 Internet Crime Report. Washington, DC: FBI Internet Crime Complaint Center; 2024.</li>
+          <li id="ref9">Sahin DO, et al. Phishing URL detection via CNN and attention‑based hierarchical RNN. <em>Proc ICIM.</em> 2019.</li>
+          <li id="ref10">Rakib MRH, et al. Enhancement of short text clustering by iterative classification. <em>Proc ICNLSP.</em> 2020.</li>
+          <li id="ref11">Sanh V, et al. DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter. <em>arXiv.</em> 2019;1910.01108.</li>
+          <li id="ref12">Aghaei E, et al. DINE: detecting online scam via behavioral graph analysis. <em>Proc IEEE INFOCOM.</em> 2022.</li>
+          <li id="ref13">Chen Z, et al. Can LLMs detect social engineering attacks? A zero‑shot evaluation. <em>arXiv.</em> 2023.</li>
+          <li id="ref14">Shannon CE. A mathematical theory of communication. <em>Bell Syst Tech J.</em> 1948;27(3):379–423.</li>
+          <li id="ref15">Almeida TA, Hidalgo JMG. Contributions to the study of SMS spam filtering. <em>Proc DOCENG.</em> 2011.</li>
+        </ol>
+      </div>
+    </section>
+
+    <footer class="site-end">
+      National Student Research Institution (NSRI) · Open Science Archive · nsri.world · Article NSRI‑J‑2026‑0041
+    </footer>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  try{
+    // Mobile TOC: clone sidebar list into mobile drawer
+    var srcList = document.getElementById('tocList');
+    var mobileList = document.getElementById('mobileTocList');
+    if(srcList && mobileList){
+      mobileList.innerHTML = srcList.innerHTML;
+    }
+    var toggle = document.getElementById('tocToggle');
+    var drawer = document.getElementById('mobileToc');
+    if(toggle && drawer){
+      toggle.addEventListener('click', function(){
+        var open = drawer.classList.toggle('open');
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      drawer.addEventListener('click', function(e){
+        if(e.target.tagName === 'A'){
+          drawer.classList.remove('open');
+          toggle.setAttribute('aria-expanded','false');
+        }
+      });
+    }
+  }catch(e){ console.error('nav setup failed', e); }
+
+  try{
+    // Scroll progress bar
+    var bar = document.getElementById('progress');
+    function updateProgress(){
+      var doc = document.documentElement;
+      var scrollTop = window.scrollY || doc.scrollTop;
+      var height = doc.scrollHeight - doc.clientHeight;
+      var pct = height > 0 ? (scrollTop / height) * 100 : 0;
+      if(bar) bar.style.width = pct + '%';
+    }
+    window.addEventListener('scroll', updateProgress, { passive:true });
+    window.addEventListener('resize', updateProgress);
+    updateProgress();
+  }catch(e){ console.error('progress bar failed', e); }
+
+  try{
+    // Scroll spy
+    var sections = Array.prototype.slice.call(document.querySelectorAll('main section[id]'));
+    var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+    if('IntersectionObserver' in window && sections.length && links.length){
+      var map = {};
+      links.forEach(function(l){ map[l.getAttribute('href').slice(1)] = l; });
+      var observer = new IntersectionObserver(function(entries){
+        entries.forEach(function(entry){
+          var id = entry.target.getAttribute('id');
+          var link = map[id];
+          if(!link) return;
+          if(entry.isIntersecting){
+            links.forEach(function(l){ l.classList.remove('active'); });
+            link.classList.add('active');
+          }
+        });
+      }, { rootMargin: '-15% 0px -75% 0px', threshold: 0 });
+      sections.forEach(function(s){ observer.observe(s); });
+    }
+  }catch(e){ console.error('scroll spy failed', e); }
+})();
+</script>
+</body>
+</html>
